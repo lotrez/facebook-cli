@@ -64,10 +64,16 @@ A command-line interface for automating Facebook Marketplace browsing and Messen
 
 ### Browser Configuration
 - **Engine**: Chromium (via Playwright)
-- **Mode**: Headless
+- **Mode**: Headless (default), can be overridden with `--headed` flag
 - **Viewport**: 1920x1080
 - **User Agent**: Rotate between common desktop browsers
 - **Stealth**: Enabled with puppeteer-extra-plugin-stealth
+
+## Command Line Options
+
+### Global Options
+All commands support:
+- `--headed` - Show browser window (headless mode off)
 
 ### Anti-Detection Strategy
 1. Random delays (1000-5000ms) between actions

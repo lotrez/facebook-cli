@@ -15,6 +15,9 @@ export const config = {
     headless: process.env.FACEBOOK_HEADLESS !== 'false',
     slowMo: parseInt(process.env.FACEBOOK_SLOW_MO || '0', 10),
   },
+  runtime: {
+    headless: true, // Will be overridden by --headed flag
+  },
   browser: {
     viewport: { width: 1920, height: 1080 },
     userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',

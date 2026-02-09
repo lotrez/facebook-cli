@@ -35,9 +35,13 @@ export const searchCommand = defineCommand({
     format: option(z.enum(['json', 'markdown']).default('json'), {
       description: 'Output format',
     }),
+    headed: option(z.coerce.boolean().default(false), {
+      description: 'Show browser window (headed mode)',
+    }),
   },
   handler: async ({ flags }) => {
     try {
+      browserManager.setHeadless(!flags.headed);
       const listings = await marketplaceManager.search({
         query: flags.query,
         location: flags.location,
@@ -72,9 +76,13 @@ export const listingCommand = defineCommand({
     format: option(z.enum(['json', 'markdown']).default('json'), {
       description: 'Output format',
     }),
+    headed: option(z.coerce.boolean().default(false), {
+      description: 'Show browser window (headed mode)',
+    }),
   },
   handler: async ({ flags }) => {
     try {
+      browserManager.setHeadless(!flags.headed);
       const listing = await marketplaceManager.getListing(flags.id);
       
       if (!listing) {

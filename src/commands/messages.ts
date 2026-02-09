@@ -14,9 +14,13 @@ export const listCommand = defineCommand({
     format: option(z.enum(['json', 'markdown']).default('json'), {
       description: 'Output format',
     }),
+    headed: option(z.coerce.boolean().default(false), {
+      description: 'Show browser window (headed mode)',
+    }),
   },
   handler: async ({ flags }) => {
     try {
+      browserManager.setHeadless(!flags.headed);
       const conversations = await messengerManager.listConversations({
         limit: flags.limit,
       });
@@ -48,9 +52,13 @@ export const readCommand = defineCommand({
     format: option(z.enum(['json', 'markdown']).default('json'), {
       description: 'Output format',
     }),
+    headed: option(z.coerce.boolean().default(false), {
+      description: 'Show browser window (headed mode)',
+    }),
   },
   handler: async ({ flags }) => {
     try {
+      browserManager.setHeadless(!flags.headed);
       const messages = await messengerManager.readConversation(
         flags['conversation-id'],
         { limit: flags.limit }
@@ -80,9 +88,13 @@ export const sendCommand = defineCommand({
     message: option(z.string().min(1), {
       description: 'Message text',
     }),
+    headed: option(z.coerce.boolean().default(false), {
+      description: 'Show browser window (headed mode)',
+    }),
   },
   handler: async ({ flags }) => {
     try {
+      browserManager.setHeadless(!flags.headed);
       const success = await messengerManager.sendMessage(
         flags['user-id'],
         flags.message

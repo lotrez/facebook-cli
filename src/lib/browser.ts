@@ -7,13 +7,17 @@ export class BrowserManager {
   private browser: Browser | null = null;
   private page: Page | null = null;
 
+  setHeadless(headless: boolean): void {
+    config.runtime.headless = headless;
+  }
+
   async launch(): Promise<Page> {
     if (this.page) {
       return this.page;
     }
 
     this.browser = await chromium.launch({
-      headless: config.facebook.headless,
+      headless: config.runtime.headless,
       slowMo: config.facebook.slowMo,
     });
 

@@ -34,6 +34,11 @@ cp .env.example .env
 
 ## Usage
 
+### Global Options
+
+All commands support the following option:
+- `--headed` - Show the browser window (defaults to headless)
+
 ### Marketplace Commands
 
 **Search for listings:**
@@ -53,6 +58,9 @@ bun run src/index.ts search \
 
 # Output as markdown
 bun run src/index.ts search --query "furniture" --format markdown
+
+# Show browser window (headed mode)
+bun run src/index.ts search --query "car" --headed
 ```
 
 **Get listing details:**

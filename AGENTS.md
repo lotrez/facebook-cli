@@ -60,6 +60,13 @@ FACEBOOK_HEADLESS=       # true | false (default: true)
 FACEBOOK_SLOW_MO=        # Slow motion delay in ms for debugging (default: 0)
 ```
 
+## Command Options
+All commands support a `--headed` flag to show the browser window:
+```bash
+facebook-cli search --query "laptop" --headed
+facebook-cli send --user-id 123 --message "Hello" --headed
+```
+
 ## Code Conventions
 - Use TypeScript with strict mode
 - All browser automation code in src/lib/
