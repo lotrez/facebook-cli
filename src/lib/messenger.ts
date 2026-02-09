@@ -8,31 +8,91 @@ export class MessengerManager {
   private async handlePinChallenge(): Promise<boolean> {
     const page = browserManager.getPage();
     
-    // Check if PIN input is present
-    const pinInput = await page.locator('input[type="password"], input[placeholder*="PIN"], input[name*="pin"]').first();
-    const hasPinInput = await pinInput.count() > 0;
+    // Wait a moment for any PIN dialog to appear
+    await page.waitForTimeout(3000);
     
-    if (hasPinInput && config.facebook.pin) {
-      console.error('PIN code required, entering...');
+    if (!config.facebook.pin) {
+      console.error('No PIN configured in FACEBOOK_PIN env variable');
+      return false;
+    }
+    
+    // Check for PIN dialog by looking for specific text or elements
+    // Facebook Messenger PIN dialog typically has specific text
+    const pageContent = await page.content();
+    const hasPinDialog = pageContent.includes('PIN') || 
+                        pageContent.includes('pin') ||
+                        pageContent.includes('code') ||
+                        pageContent.includes('unlock');
+    
+    if (!hasPinDialog) {
+      console.error('No PIN dialog detected');
+      return true;
+    }
+    
+    console.error('PIN dialog detected, looking for input field...');
+    
+    // Try to find PIN input - specifically looking for numeric inputs or PIN-related fields
+    // Avoid general password fields which might be login forms
+    const pinSelectors = [
+      'input[placeholder*="PIN" i]',
+      'input[name*="pin" i]',
+      'input[aria-label*="PIN" i]',
+      'input[type="tel"]', // PIN codes are often tel type
+      'input[inputmode="numeric"]',
+      '[role="dialog"] input[type="password"]', // Password in a dialog is likely PIN
+      '[role="alertdialog"] input',
+    ];
+    
+    for (const selector of pinSelectors) {
       try {
-        await pinInput.fill(config.facebook.pin);
-        await randomDelay();
-        
-        // Look for submit button
-        const submitBtn = await page.locator('button[type="submit"], button:has-text("Continue"), button:has-text("Submit")').first();
-        if (await submitBtn.count() > 0) {
-          await submitBtn.click();
-          await randomDelay();
-          console.error('PIN entered successfully');
-          return true;
+        const inputs = await page.locator(selector).all();
+        if (inputs.length > 0) {
+          console.error(`Found ${inputs.length} potential PIN inputs with selector: ${selector}`);
+          
+          for (const input of inputs) {
+            try {
+              console.error('Attempting to enter PIN...');
+              
+              await input.fill(config.facebook.pin);
+              console.error('PIN entered');
+              await randomDelay();
+              
+              // Try to find and click a submit button first
+              const submitButton = await page.locator('button[type="submit"], button:has-text("OK"), button:has-text("Submit"), [role="dialog"] button').first();
+              try {
+                if (await submitButton.count() > 0) {
+                  await submitButton.click();
+                  console.error('Clicked submit button');
+                } else {
+                  // Press Enter as fallback
+                  await input.press('Enter');
+                  console.error('Pressed Enter to submit PIN');
+                }
+              } catch (e) {
+                // Page might have navigated, that's OK
+                console.error('Submit action completed (page may have navigated)');
+              }
+              
+              // Wait for page to process PIN
+              await randomDelay();
+              await randomDelay();
+              await randomDelay();
+              
+              console.error('PIN submission completed');
+              return true;
+            } catch (e) {
+              console.error('Failed to enter PIN:', e);
+              continue;
+            }
+          }
         }
       } catch (error) {
-        console.error('Failed to enter PIN:', error);
-        return false;
+        // Continue to next selector
       }
     }
     
-    return !hasPinInput; // Return true if no PIN needed, false if PIN needed but not provided
+    console.error('Could not find PIN input field');
+    return false;
   }
 
   async listConversations(options: MessageOptions = {}): Promise<Conversation[]> {
@@ -41,23 +101,53 @@ export class MessengerManager {
     
     console.error('Fetching conversations...');
     
-    // Navigate to messenger
+    // Navigate to facebook.com/messages (uses same session as main Facebook)
     await page.goto('https://www.facebook.com/messages', { waitUntil: 'domcontentloaded', timeout: 30000 });
     await randomDelay();
+    await randomDelay(); // Extra wait for PIN dialog
     
-    // Handle PIN challenge if present
+    // Check current URL
+    let currentUrl = page.url();
+    console.error('URL after navigation:', currentUrl);
+    
+    // Handle PIN challenge if present (Facebook sometimes asks for PIN when accessing messages)
+    console.error('Checking for PIN challenge...');
     const pinHandled = await this.handlePinChallenge();
     if (!pinHandled) {
-      console.error('PIN challenge failed or required but not configured');
+      console.error('WARNING: PIN challenge not handled - messages may not load');
     }
     
-    // Wait for conversations to load
-    try {
-      await page.waitForSelector('[role="main"], [data-testid="mw_thread_list"]', { timeout: 10000 });
-    } catch (error) {
-      console.error('Could not load conversations');
-      return [];
+    // Wait for content to load after PIN
+    await randomDelay();
+    await randomDelay();
+    
+    // Check current URL again
+    currentUrl = page.url();
+    console.error('URL after PIN handling:', currentUrl);
+    
+    // If we're on a specific conversation, extract it as a conversation item
+    const conversationMatch = currentUrl.match(/\/messages\/t\/(\d+)/);
+    if (conversationMatch) {
+      const conversationId = conversationMatch[1];
+      console.error(`On conversation page, ID: ${conversationId}`);
+      
+      // Try to extract conversation info from the page
+      const participantName = await page.locator('h2, [role="main"] h1, [data-testid="conversation_title"]').first().textContent().catch(() => 'Unknown');
+      
+      console.error(`Found conversation with: ${participantName}`);
+      
+      // Return this as a single conversation
+      return [{
+        id: conversationId,
+        participants: [{ id: '', name: participantName || 'Unknown' }],
+        lastMessage: undefined,
+        unreadCount: 0,
+      }] as Conversation[];
     }
+    
+    // Debug: Log what we see on the page
+    const debugLinks = await page.locator('a[href*="/messages/t/"]').count();
+    console.error(`Debug: Found ${debugLinks} message thread links on page`);
     
     // Extract conversations
     const conversations = await page.evaluate((limit) => {
@@ -68,12 +158,17 @@ export class MessengerManager {
         '[data-testid="mw_thread_list"] [role="link"]',
         '[role="main"] a[href*="/messages/t/"]',
         '[data-testid="mw_thread_list_item"]',
+        '[data-pagelet="MessengerContent"] a[href*="/messages/t/"]',
+        'a[href*="/messages/t/"]',
       ];
       
       let elements: Element[] = [];
       for (const selector of selectors) {
         elements = Array.from(document.querySelectorAll(selector));
-        if (elements.length > 0) break;
+        if (elements.length > 0) {
+          console.error(`Found ${elements.length} conversations with selector: ${selector}`);
+          break;
+        }
       }
       
       elements.slice(0, limit).forEach((el, index) => {
@@ -82,10 +177,19 @@ export class MessengerManager {
         const idMatch = href.match(/\/messages\/t\/(\d+)/);
         const id = idMatch ? idMatch[1] : `conv_${index}`;
         
-        // Extract participant names
+        // Extract participant names - try multiple approaches
+        let name = 'Unknown';
         const text = el.textContent || '';
-        const nameMatch = text.match(/^([^·]+)/);
-        const name = nameMatch?.[1]?.trim() ?? 'Unknown';
+        
+        // Try to find name in aria-label or text content
+        const ariaLabel = el.getAttribute('aria-label');
+        if (ariaLabel) {
+          const splitName = ariaLabel.split(',')[0];
+          name = splitName ? splitName : 'Unknown';
+        } else {
+          const nameMatch = text.match(/^([^·\n]+)/);
+          name = nameMatch?.[1]?.trim() ?? 'Unknown';
+        }
         
         // Extract last message preview
         const lines = text.split('·').map(s => s.trim());
@@ -106,6 +210,7 @@ export class MessengerManager {
       return items;
     }, options.limit || 20);
     
+    console.error(`Retrieved ${conversations.length} conversations`);
     return conversations as Conversation[];
   }
 
@@ -148,6 +253,8 @@ export class MessengerManager {
         '[data-testid="message_container"]',
         '[role="main"] div[dir="auto"]',
         '[data-testid="message_text"]',
+        '[data-testid="message_content"]',
+        '[data-pagelet="MessengerContent"] div[dir="auto"]',
       ];
       
       let elements: Element[] = [];
@@ -163,6 +270,7 @@ export class MessengerManager {
         // Try to determine if sent or received
         const isSent = el.closest('[data-testid*="sent"]') !== null || 
                       el.getAttribute('style')?.includes('background-color') ||
+                      el.closest('div[role="gridcell"]')?.getAttribute('style')?.includes('flex-end') ||
                       false;
         
         items.push({
