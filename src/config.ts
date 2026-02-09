@@ -8,6 +8,7 @@ export const config = {
   facebook: {
     email: process.env.FACEBOOK_EMAIL || '',
     password: process.env.FACEBOOK_PASSWORD || '',
+    pin: process.env.FACEBOOK_PIN || '',
     sessionDir: process.env.FACEBOOK_SESSION_DIR || DEFAULT_SESSION_DIR,
     headless: process.env.FACEBOOK_HEADLESS !== 'false',
     slowMo: parseInt(process.env.FACEBOOK_SLOW_MO || '0', 10),

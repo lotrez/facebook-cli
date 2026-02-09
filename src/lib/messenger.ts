@@ -1,9 +1,40 @@
 import { browserManager } from './browser';
 import { authManager } from './auth';
+import { config } from '../config';
 import { randomDelay } from './utils';
 import type { Conversation, Message, MessageOptions } from '../types';
 
 export class MessengerManager {
+  private async handlePinChallenge(): Promise<boolean> {
+    const page = browserManager.getPage();
+    
+    // Check if PIN input is present
+    const pinInput = await page.locator('input[type="password"], input[placeholder*="PIN"], input[name*="pin"]').first();
+    const hasPinInput = await pinInput.count() > 0;
+    
+    if (hasPinInput && config.facebook.pin) {
+      console.error('PIN code required, entering...');
+      try {
+        await pinInput.fill(config.facebook.pin);
+        await randomDelay();
+        
+        // Look for submit button
+        const submitBtn = await page.locator('button[type="submit"], button:has-text("Continue"), button:has-text("Submit")').first();
+        if (await submitBtn.count() > 0) {
+          await submitBtn.click();
+          await randomDelay();
+          console.error('PIN entered successfully');
+          return true;
+        }
+      } catch (error) {
+        console.error('Failed to enter PIN:', error);
+        return false;
+      }
+    }
+    
+    return !hasPinInput; // Return true if no PIN needed, false if PIN needed but not provided
+  }
+
   async listConversations(options: MessageOptions = {}): Promise<Conversation[]> {
     await authManager.ensureLoggedIn();
     const page = browserManager.getPage();
@@ -13,6 +44,12 @@ export class MessengerManager {
     // Navigate to messenger
     await page.goto('https://www.facebook.com/messages', { waitUntil: 'domcontentloaded', timeout: 30000 });
     await randomDelay();
+    
+    // Handle PIN challenge if present
+    const pinHandled = await this.handlePinChallenge();
+    if (!pinHandled) {
+      console.error('PIN challenge failed or required but not configured');
+    }
     
     // Wait for conversations to load
     try {
@@ -82,6 +119,9 @@ export class MessengerManager {
     await page.goto(`https://www.facebook.com/messages/t/${conversationId}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await randomDelay();
     
+    // Handle PIN challenge if present
+    await this.handlePinChallenge();
+    
     // Wait for messages to load
     try {
       await page.waitForSelector('[role="main"], [data-testid="message_container"]', { timeout: 10000 });
@@ -150,6 +190,9 @@ export class MessengerManager {
     // Navigate to conversation with user
     await page.goto(`https://www.facebook.com/messages/t/${userId}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await randomDelay();
+    
+    // Handle PIN challenge if present
+    await this.handlePinChallenge();
     
     // Wait for message input
     try {
