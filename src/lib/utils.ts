@@ -20,6 +20,7 @@ export function toMarkdownListings(listings: any[]): string {
   
   listings.forEach((listing, index) => {
     markdown += `## ${index + 1}. ${listing.title}\n`;
+    markdown += `- **ID:** ${listing.id}\n`;
     markdown += `- **Price:** $${listing.price} ${listing.currency}\n`;
     markdown += `- **Location:** ${listing.location}\n`;
     markdown += `- **Seller:** ${listing.seller?.name || 'Unknown'}\n`;
