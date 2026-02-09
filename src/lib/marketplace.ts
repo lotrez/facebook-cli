@@ -20,7 +20,7 @@ export class MarketplaceManager {
     
     console.error(`Searching marketplace for: ${options.query}`);
     
-    await page.goto(url, { waitUntil: 'networkidle' });
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await randomDelay();
     
     // Wait for listings to load
@@ -95,14 +95,29 @@ export class MarketplaceManager {
     const url = `https://www.facebook.com/marketplace/item/${id}`;
     console.error(`Fetching listing: ${id}`);
     
-    await page.goto(url, { waitUntil: 'networkidle' });
+    try {
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    } catch (error) {
+      console.error('Navigation timeout, continuing anyway...');
+    }
     await randomDelay();
     
-    // Wait for content to load
-    try {
-      await page.waitForSelector('h1, [role="main"]', { timeout: 10000 });
-    } catch (error) {
-      console.error('Listing not found or page took too long to load');
+    // Wait for content to load - use a more lenient approach
+    let contentFound = false;
+    for (let i = 0; i < 3; i++) {
+      const hasTitle = await page.locator('h1').count() > 0;
+      const hasContent = await page.locator('[role="main"], div[role="dialog"]').count() > 0;
+      
+      if (hasTitle || hasContent) {
+        contentFound = true;
+        break;
+      }
+      
+      await randomDelay();
+    }
+    
+    if (!contentFound) {
+      console.error('Listing content not found');
       return null;
     }
     

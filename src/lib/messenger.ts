@@ -11,7 +11,7 @@ export class MessengerManager {
     console.error('Fetching conversations...');
     
     // Navigate to messenger
-    await page.goto('https://www.facebook.com/messages', { waitUntil: 'networkidle' });
+    await page.goto('https://www.facebook.com/messages', { waitUntil: 'domcontentloaded', timeout: 30000 });
     await randomDelay();
     
     // Wait for conversations to load
@@ -79,7 +79,7 @@ export class MessengerManager {
     console.error(`Reading conversation: ${conversationId}`);
     
     // Navigate to specific conversation
-    await page.goto(`https://www.facebook.com/messages/t/${conversationId}`, { waitUntil: 'networkidle' });
+    await page.goto(`https://www.facebook.com/messages/t/${conversationId}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await randomDelay();
     
     // Wait for messages to load
@@ -148,7 +148,7 @@ export class MessengerManager {
     console.error(`Sending message to user: ${userId}`);
     
     // Navigate to conversation with user
-    await page.goto(`https://www.facebook.com/messages/t/${userId}`, { waitUntil: 'networkidle' });
+    await page.goto(`https://www.facebook.com/messages/t/${userId}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await randomDelay();
     
     // Wait for message input
