@@ -131,15 +131,46 @@ export class MessengerManager {
       const conversationId = conversationMatch[1];
       console.error(`On conversation page, ID: ${conversationId}`);
       
-      // Try to extract conversation info from the page
-      const participantName = await page.locator('h2, [role="main"] h1, [data-testid="conversation_title"]').first().textContent().catch(() => 'Unknown');
+      // Try multiple selectors for participant name
+      const participantSelectors = [
+        // Try specific conversation header elements
+        '[data-testid="mwthread_header"] span[dir="auto"]',
+        'h2[data-pagelet="MessengerContent"] span[dir="auto"]',
+        '[role="main"] h3 span',
+        // Fallback to looking for person names in the conversation
+        'a[href*="/people/"] span[dir="auto"]',
+        'a[href*="/profile/"] span',
+      ];
+      
+      let participantName = 'Unknown';
+      for (const selector of participantSelectors) {
+        try {
+          const element = await page.locator(selector).first();
+          if (await element.count() > 0) {
+            const text = await element.textContent() || '';
+            // Filter out notification messages and short text
+            if (text && 
+                !text.includes('notifications') && 
+                !text.includes('Notifications') && 
+                !text.includes('désactivées') &&
+                text.length > 3 &&
+                text.length < 50) {
+              participantName = text.trim();
+              console.error(`Found participant with selector "${selector}": ${participantName}`);
+              break;
+            }
+          }
+        } catch (e) {
+          // Continue to next selector
+        }
+      }
       
       console.error(`Found conversation with: ${participantName}`);
       
       // Return this as a single conversation
       return [{
         id: conversationId,
-        participants: [{ id: '', name: participantName || 'Unknown' }],
+        participants: [{ id: '', name: participantName }],
         lastMessage: undefined,
         unreadCount: 0,
       }] as Conversation[];
