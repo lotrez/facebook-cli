@@ -85,154 +85,106 @@ export class MessengerManager {
     
     console.error('Fetching conversations...');
     
-    // Click on Messenger button to open the dropdown
-    console.error('Clicking Messenger button...');
-    const messengerBtn = await page.locator('button[aria-label*="Messenger"], button[aria-label*="messages" i], [aria-label="Contrôles et paramètres du compte"] button:nth-child(2)').first();
-    if (await messengerBtn.count() > 0) {
-      await messengerBtn.click();
-      console.error('Clicked Messenger button');
-      await randomDelay();
-      await randomDelay();
-    }
+    // Try to navigate directly to Marketplace messages
+    console.error('Navigating to Marketplace messages...');
+    await page.goto('https://www.facebook.com/messages/?filter=marketplace', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await randomDelay();
+    await randomDelay();
     
-    // Handle PIN challenge if present in the popup
+    // Handle PIN challenge if present
     console.error('Checking for PIN challenge...');
     const pinHandled = await this.handlePinChallenge();
     if (!pinHandled) {
       console.error('WARNING: PIN challenge not handled - messages may not load');
     }
     
-    // Click on Marketplace tab in the popup
-    console.error('Looking for Marketplace tab...');
-    const marketplaceSelectors = [
-      'button:has-text("Marketplace")',
-      '[role="dialog"] button:has-text("Marketplace")',
-      '[role="grid"] button:has-text("Marketplace")',
-      'span:has-text("Marketplace")',
+    // Wait for content to load
+    await randomDelay();
+    await randomDelay();
+    await randomDelay();
+    
+    // Extract conversations using Playwright locators
+    console.error('Extracting conversations...');
+    
+    const conversations: Conversation[] = [];
+    
+    // Try multiple selectors to find conversation links
+    const linkSelectors = [
+      'a[href*="/messages/t/"][role="link"]',
+      '[role="grid"] a[href*="/messages/t/"]',
+      'a[href*="/messages/t/"]',
     ];
     
-    for (const selector of marketplaceSelectors) {
+    let links: any[] = [];
+    for (const selector of linkSelectors) {
       try {
-        const buttons = await page.locator(selector).all();
-        for (const btn of buttons) {
-          const text = await btn.textContent() || '';
-          if (text.includes('Marketplace')) {
-            console.error(`Found Marketplace button: ${text}`);
-            await btn.click();
-            console.error('Clicked on Marketplace');
-            await randomDelay();
-            await randomDelay();
-            await randomDelay(); // Wait for conversations to load
-            break;
-          }
+        const count = await page.locator(selector).count();
+        console.error(`Selector "${selector}" found ${count} elements`);
+        if (count > 0) {
+          links = await page.locator(selector).all();
+          console.error(`Found ${links.length} conversation links with selector: ${selector}`);
+          break;
         }
-        if (buttons.length > 0) break;
       } catch (e) {
-        // Continue to next selector
+        console.error(`Error with selector "${selector}":`, e);
       }
     }
     
-    // Wait for conversation list to load
-    console.error('Waiting for conversation list to load...');
-    await randomDelay();
-    await randomDelay();
-    
-    // Extract conversations from the Marketplace grid
-    const conversations = await page.evaluate((limit) => {
-      const items: any[] = [];
-      
-      // Look for the Marketplace grid
-      const gridSelectors = [
-        'grid[aria-label="Marketplace"]',
-        '[role="grid"][aria-label*="Marketplace"]',
-        '[aria-label="Marketplace"] [role="grid"]',
-        '[role="grid"]',
-      ];
-      
-      let grid: Element | null = null;
-      for (const selector of gridSelectors) {
-        grid = document.querySelector(selector);
-        if (grid) {
-          console.error(`Found grid with selector: ${selector}`);
-          break;
-        }
-      }
-      
-      if (!grid) {
-        console.error('No Marketplace grid found');
-        return items;
-      }
-      
-      // Find all rows (conversations) in the grid
-      const rows = grid.querySelectorAll('[role="row"], .x1n2onr6');
-      console.error(`Found ${rows.length} rows in grid`);
-      
-      rows.forEach((row, index) => {
-        // Find the link in the row
-        const link = row.querySelector('a[href*="/messages/t/"]');
-        if (!link) return;
-        
-        const href = link.getAttribute('href') || '';
+    for (const link of links.slice(0, options.limit || 20)) {
+      try {
+        const href = await link.getAttribute('href') || '';
         const idMatch = href.match(/\/messages\/t\/(\d+)/);
-        if (!idMatch) return;
+        if (!idMatch) continue;
         
         const id = idMatch[1];
-        
-        // Extract text content
-        const text = link.textContent || '';
+        const text = await link.textContent() || '';
         
         // Parse the text to extract name, title, message, and time
         // Format: "Name · Listing Title Message · Time"
-        const parts = text.split('·').map(p => p.trim());
+        const parts = text.split('·').map((p: string) => p.trim());
         
         let name = 'Unknown';
-        let title = '';
         let lastMessageText = '';
         let time = '';
         
         if (parts.length >= 2) {
-          // First part usually contains name and title
-          const firstPart = parts[0] ?? '';
-          const nameTitleMatch = firstPart.match(/^([^·]+)\s*·\s*(.+)$/);
-          if (nameTitleMatch && nameTitleMatch[1]) {
-            name = nameTitleMatch[1].trim();
-            if (nameTitleMatch[2]) {
-              title = nameTitleMatch[2].trim();
-            }
-          } else {
-            name = firstPart;
-          }
+          // First part usually contains name
+          const firstPart = parts[0];
+          name = firstPart ? firstPart : 'Unknown';
           
           // Last part is usually the time
           const lastPart = parts[parts.length - 1];
-          time = lastPart ?? '';
+          time = lastPart ? lastPart : '';
           
           // Middle parts contain the message
           if (parts.length > 2) {
-            const middleParts = parts.slice(1, -1);
-            lastMessageText = middleParts.filter((p): p is string => !!p).join(' · ');
+            lastMessageText = parts.slice(1, -1).join(' · ');
           }
         }
         
-        items.push({
+        // Clean up the name (remove listing title if present)
+        const nameParts = name.split('·');
+        if (nameParts.length > 1 && nameParts[0]) {
+          name = nameParts[0].trim();
+        }
+        
+        conversations.push({
           id,
           participants: [{ id: '', name }],
-          title,
           lastMessage: lastMessageText ? {
             text: lastMessageText,
             timestamp: new Date(),
             senderId: '',
           } : undefined,
-          time,
           unreadCount: 0,
         });
-      });
-      
-      return items.slice(0, limit);
-    }, options.limit || 20);
+      } catch (e) {
+        console.error('Failed to extract conversation:', e);
+      }
+    }
     
     console.error(`Retrieved ${conversations.length} conversations`);
-    return conversations as Conversation[];
+    return conversations;
   }
 
   async readConversation(conversationId: string, options: MessageOptions = {}): Promise<Message[]> {
