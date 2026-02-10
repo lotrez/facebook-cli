@@ -8,10 +8,10 @@ A headless CLI tool for automating Facebook Marketplace browsing and Messenger i
 ### Quick Start with npx
 ```bash
 # Run directly without installation
-npx @lotrez/facebook-cli <command>
+npx facebook-marketplace-cli <command>
 
 # Or install globally
-npm install -g @lotrez/facebook-cli
+npm install -g facebook-marketplace-cli
 facebook-cli <command>
 ```
 
