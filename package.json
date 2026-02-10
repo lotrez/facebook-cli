@@ -1,18 +1,40 @@
 {
-  "name": "facebook-cli",
-  "module": "src/index.ts",
+  "name": "@lucienpoirier/facebook-cli",
+  "version": "1.0.0",
+  "description": "CLI tool for Facebook Marketplace and Messenger automation",
+  "module": "dist/index.js",
   "type": "module",
-  "private": true,
+  "main": "dist/index.js",
   "bin": {
-    "facebook-cli": "./src/index.ts"
+    "facebook-cli": "dist/index.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "SKILL.md"
+  ],
   "scripts": {
     "dev": "bun run src/index.ts",
     "build": "bun build src/index.ts --outdir dist --target node",
     "test": "bun test",
     "test:watch": "bun test --watch",
     "typecheck": "tsc --noEmit",
-    "lint": "echo 'No linter configured'"
+    "lint": "echo 'No linter configured'",
+    "prepublishOnly": "bun run build"
+  },
+  "keywords": [
+    "facebook",
+    "marketplace",
+    "messenger",
+    "cli",
+    "automation",
+    "scraping"
+  ],
+  "author": "lotrez",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lotrez/facebook-cli.git"
   },
   "devDependencies": {
     "@types/bun": "latest",
@@ -22,5 +44,8 @@
     "@bunli/core": "^0.5.4",
     "playwright": "^1.58.2",
     "zod": "^4.3.6"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

@@ -85,9 +85,9 @@ export class MessengerManager {
     
     console.error('Fetching conversations...');
     
-    // Try to navigate directly to Marketplace messages
-    console.error('Navigating to Marketplace messages...');
-    await page.goto('https://www.facebook.com/messages/?filter=marketplace', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    // Navigate to messages page
+    console.error('Navigating to messages...');
+    await page.goto('https://www.facebook.com/messages/', { waitUntil: 'domcontentloaded', timeout: 30000 });
     await randomDelay();
     await randomDelay();
     
@@ -98,8 +98,76 @@ export class MessengerManager {
       console.error('WARNING: PIN challenge not handled - messages may not load');
     }
     
-    // Wait for content to load
+    // Wait for sidebar to load
     await randomDelay();
+    await randomDelay();
+    await randomDelay();
+    
+    // Look for the sidebar with conversation list and find Marketplace button
+    console.error('Looking for conversation list sidebar...');
+    
+    // Try to find the sidebar navigation
+    const sidebarSelectors = [
+      '[role="navigation"][aria-label*="discussions"]',
+      '[aria-label*="Liste des discussions"]',
+      'nav[aria-label*="discussions"]',
+      '[role="navigation"]',
+    ];
+    
+    let sidebar = null;
+    for (const selector of sidebarSelectors) {
+      try {
+        const count = await page.locator(selector).count();
+        console.error(`Sidebar selector "${selector}" found ${count} elements`);
+        if (count > 0) {
+          sidebar = await page.locator(selector).first();
+          break;
+        }
+      } catch (e) {
+        console.error(`Error with sidebar selector ${selector}:`, e);
+      }
+    }
+    
+    // Look for Marketplace button anywhere on the page
+    console.error('Looking for Marketplace button on page...');
+    const marketplaceSelectors = [
+      'button:has-text("Marketplace")',
+      '[role="button"]:has-text("Marketplace")',
+      'button[aria-label*="Marketplace"]',
+      'button:has(span:has-text("Marketplace"))',
+    ];
+    
+    let marketplaceClicked = false;
+    for (const selector of marketplaceSelectors) {
+      try {
+        const buttons = await page.locator(selector).all();
+        console.error(`Selector "${selector}" found ${buttons.length} buttons`);
+        
+        for (const btn of buttons) {
+          const text = (await btn.textContent().catch(() => '')) ?? '';
+          console.error(`Button text: "${text}"`);
+          if (text.toLowerCase().includes('marketplace')) {
+            console.error(`Found Marketplace button: ${text}`);
+            await btn.click();
+            console.error('Clicked on Marketplace button');
+            await randomDelay();
+            await randomDelay();
+            await randomDelay();
+            marketplaceClicked = true;
+            break;
+          }
+        }
+        if (marketplaceClicked) break;
+      } catch (e) {
+        console.error(`Error with selector ${selector}:`, e);
+      }
+    }
+    
+    if (!marketplaceClicked) {
+      console.error('Could not click Marketplace button, continuing anyway...');
+    }
+    
+    // Wait for Marketplace grid to load
     await randomDelay();
     await randomDelay();
     
