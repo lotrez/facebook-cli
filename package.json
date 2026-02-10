@@ -1,5 +1,5 @@
 {
-  "name": "@lucienpoirier/facebook-cli",
+  "name": "@lotrez/facebook-cli",
   "version": "1.0.0",
   "description": "CLI tool for Facebook Marketplace and Messenger automation",
   "module": "dist/index.js",
