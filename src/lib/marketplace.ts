@@ -36,56 +36,112 @@ export class MarketplaceManager {
       await browserManager.humanScroll();
     }
     
-    // Extract listings
-    const listings = await page.evaluate(() => {
-      const items: any[] = [];
-      const links = document.querySelectorAll('a[href*="/marketplace/item/"]');
-      
-      links.forEach(link => {
-        const href = link.getAttribute('href');
-        if (!href) return;
-        
+    // Extract listings using Playwright locators
+    console.error('Extracting listings...');
+    const listings: Listing[] = [];
+    
+    // Find all listing links
+    const links = await page.locator('a[href*="/marketplace/item/"]').all();
+    console.error(`Found ${links.length} listing links`);
+    
+    for (const link of links.slice(0, options.limit || 20)) {
+      try {
+        const href = await link.getAttribute('href') || '';
         const match = href.match(/\/marketplace\/item\/(\d+)/);
-        if (!match) return;
+        if (!match || !match[1]) continue;
+
+        const id: string = match[1];
         
-        const id = match[1];
+        // Get the link text which contains all info: "Price Title Location KM"
+        const linkText = await link.textContent() || '';
+
+        // Try to extract price (number followed by €)
+        const priceMatch = linkText.match(/([\d\s]+)\s*€/);
+        let price = 0;
+        if (priceMatch && priceMatch[1]) {
+          const priceStr = priceMatch[1].replace(/\s/g, '');
+          const parsedPrice = parseInt(priceStr, 10);
+          if (!isNaN(parsedPrice)) {
+            price = parsedPrice;
+          }
+        }
+
+        // Try to extract location (pattern: City, REGION)
+        const locationMatch = linkText.match(/([A-Z][^\d]+?[a-z]+,\s*[A-Z]{2,})/);
+        let location = 'Unknown Location';
+        if (locationMatch && locationMatch[1]) {
+          location = locationMatch[1].trim();
+        }
+
+        // Extract title - everything between first price and location
+        let title = 'Unknown Item';
+        if (priceMatch?.[0] && locationMatch?.[1]) {
+          const priceEnd = linkText.indexOf(priceMatch[0]) + priceMatch[0].length;
+          const locationStart = linkText.indexOf(locationMatch[1]);
+          if (priceEnd < locationStart) {
+            let rawTitle = linkText.substring(priceEnd, locationStart).trim();
+            // Remove any additional price that might be in the title (old crossed-out price)
+            rawTitle = rawTitle.replace(/[\d\s]+\s*€\s*/, '');
+            title = rawTitle || 'Unknown Item';
+          }
+        }
+
+        // Fallback: if no title extracted, try aria-label
+        if (title === 'Unknown Item') {
+          const ariaLabel = await link.getAttribute('aria-label');
+          if (ariaLabel) {
+            const parts = ariaLabel.split(' dans ');
+            if (parts.length > 0 && parts[0]) {
+              title = parts[0].trim();
+            }
+          }
+        }
         
-        // Try to extract title and price from the element
-        const text = link.textContent || '';
-        const priceMatch = text.match(/\$([\d,]+)/);
-        const price = priceMatch?.[1] ? parseInt(priceMatch[1].replace(/,/g, ''), 10) : 0;
-        
-        // Extract title - usually the text before price
-        let title = text.split('$')[0]?.trim() ?? 'Unknown Item';
-        
-        // Extract location if available
-        const locationMatch = text.match(/·\s*([^·]+)$/);
-        const location = locationMatch?.[1]?.trim() ?? 'Unknown Location';
-        
-        items.push({
+        // Fallback: try to get from link text if we couldn't extract properly
+        if (title === 'Unknown Item' || price === 0) {
+          const fullText = await link.textContent() || '';
+          
+          // Try to extract price from full text
+          const priceMatch = fullText.match(/([\d\s]+)\s*€/);
+          if (priceMatch && priceMatch[1] && price === 0) {
+            const priceStr = priceMatch[1].replace(/\s/g, '');
+            const parsedPrice = parseInt(priceStr, 10);
+            if (!isNaN(parsedPrice)) price = parsedPrice;
+          }
+          
+          // Try to get title from aria-label or text
+          const ariaLabel = await link.getAttribute('aria-label');
+          if (ariaLabel && title === 'Unknown Item') {
+            const parts = ariaLabel.split('dans');
+            const extractedTitle = parts[0]?.trim();
+            title = extractedTitle || ariaLabel || 'Unknown Item';
+          }
+        }
+
+        listings.push({
           id,
-          title,
+          title: title as string,
           price,
-          currency: 'USD',
+          currency: 'EUR',
           location,
           images: [],
           seller: { id: '', name: 'Unknown' },
           url: `https://facebook.com${href.split('?')[0]}`,
           postedAt: new Date(),
         });
-      });
-      
-      return items;
-    });
+      } catch (e) {
+        console.error('Failed to extract listing:', e);
+      }
+    }
+    
+    console.error(`Extracted ${listings.length} listings`);
     
     // Remove duplicates
     const uniqueListings = listings.filter((listing, index, self) => 
       index === self.findIndex(l => l.id === listing.id)
     );
     
-    // Apply limit
-    const limit = options.limit || 20;
-    return uniqueListings.slice(0, limit) as Listing[];
+    return uniqueListings.slice(0, options.limit || 20);
   }
 
   async getListing(id: string): Promise<Listing | null> {
