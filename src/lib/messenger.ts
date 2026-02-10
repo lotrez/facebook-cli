@@ -125,56 +125,11 @@ export class MessengerManager {
     currentUrl = page.url();
     console.error('URL after PIN handling:', currentUrl);
     
-    // If we're on a specific conversation, extract it as a conversation item
-    const conversationMatch = currentUrl.match(/\/messages\/t\/(\d+)/);
-    if (conversationMatch) {
-      const conversationId = conversationMatch[1];
-      console.error(`On conversation page, ID: ${conversationId}`);
-      
-      // Try multiple selectors for participant name
-      const participantSelectors = [
-        // Try specific conversation header elements
-        '[data-testid="mwthread_header"] span[dir="auto"]',
-        'h2[data-pagelet="MessengerContent"] span[dir="auto"]',
-        '[role="main"] h3 span',
-        // Fallback to looking for person names in the conversation
-        'a[href*="/people/"] span[dir="auto"]',
-        'a[href*="/profile/"] span',
-      ];
-      
-      let participantName = 'Unknown';
-      for (const selector of participantSelectors) {
-        try {
-          const element = await page.locator(selector).first();
-          if (await element.count() > 0) {
-            const text = await element.textContent() || '';
-            // Filter out notification messages and short text
-            if (text && 
-                !text.includes('notifications') && 
-                !text.includes('Notifications') && 
-                !text.includes('désactivées') &&
-                text.length > 3 &&
-                text.length < 50) {
-              participantName = text.trim();
-              console.error(`Found participant with selector "${selector}": ${participantName}`);
-              break;
-            }
-          }
-        } catch (e) {
-          // Continue to next selector
-        }
-      }
-      
-      console.error(`Found conversation with: ${participantName}`);
-      
-      // Return this as a single conversation
-      return [{
-        id: conversationId,
-        participants: [{ id: '', name: participantName }],
-        lastMessage: undefined,
-        unreadCount: 0,
-      }] as Conversation[];
-    }
+    // After PIN, check if we're in the messages interface
+    // The conversation list should be visible on the left side
+    console.error('Waiting for conversation list to load...');
+    await randomDelay();
+    await randomDelay();
     
     // Debug: Log what we see on the page
     const debugLinks = await page.locator('a[href*="/messages/t/"]').count();
