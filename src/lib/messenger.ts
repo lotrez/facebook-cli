@@ -16,30 +16,14 @@ export class MessengerManager {
       return false;
     }
     
-    // Check for PIN dialog by looking for specific text or elements
-    // Facebook Messenger PIN dialog typically has specific text
-    const pageContent = await page.content();
-    const hasPinDialog = pageContent.includes('PIN') || 
-                        pageContent.includes('pin') ||
-                        pageContent.includes('code') ||
-                        pageContent.includes('unlock');
-    
-    if (!hasPinDialog) {
-      console.error('No PIN dialog detected');
-      return true;
-    }
-    
-    console.error('PIN dialog detected, looking for input field...');
-    
-    // Try to find PIN input - specifically looking for numeric inputs or PIN-related fields
-    // Avoid general password fields which might be login forms
+    // Check for PIN input in the Messenger popup
     const pinSelectors = [
       'input[placeholder*="PIN" i]',
       'input[name*="pin" i]',
       'input[aria-label*="PIN" i]',
       'input[type="tel"]', // PIN codes are often tel type
       'input[inputmode="numeric"]',
-      '[role="dialog"] input[type="password"]', // Password in a dialog is likely PIN
+      '[role="dialog"] input[type="password"]',
       '[role="alertdialog"] input',
     ];
     
@@ -58,7 +42,7 @@ export class MessengerManager {
               await randomDelay();
               
               // Try to find and click a submit button first
-              const submitButton = await page.locator('button[type="submit"], button:has-text("OK"), button:has-text("Submit"), [role="dialog"] button').first();
+              const submitButton = await page.locator('button[type="submit"], button:has-text("OK"), button:has-text("Submit"], [role="dialog"] button').first();
               try {
                 if (await submitButton.count() > 0) {
                   await submitButton.click();
@@ -91,8 +75,8 @@ export class MessengerManager {
       }
     }
     
-    console.error('Could not find PIN input field');
-    return false;
+    console.error('No PIN input found or PIN already handled');
+    return true;
   }
 
   async listConversations(options: MessageOptions = {}): Promise<Conversation[]> {
@@ -101,99 +85,150 @@ export class MessengerManager {
     
     console.error('Fetching conversations...');
     
-    // Navigate to facebook.com/messages (uses same session as main Facebook)
-    await page.goto('https://www.facebook.com/messages', { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await randomDelay();
-    await randomDelay(); // Extra wait for PIN dialog
+    // Click on Messenger button to open the dropdown
+    console.error('Clicking Messenger button...');
+    const messengerBtn = await page.locator('button[aria-label*="Messenger"], button[aria-label*="messages" i], [aria-label="Contrôles et paramètres du compte"] button:nth-child(2)').first();
+    if (await messengerBtn.count() > 0) {
+      await messengerBtn.click();
+      console.error('Clicked Messenger button');
+      await randomDelay();
+      await randomDelay();
+    }
     
-    // Check current URL
-    let currentUrl = page.url();
-    console.error('URL after navigation:', currentUrl);
-    
-    // Handle PIN challenge if present (Facebook sometimes asks for PIN when accessing messages)
+    // Handle PIN challenge if present in the popup
     console.error('Checking for PIN challenge...');
     const pinHandled = await this.handlePinChallenge();
     if (!pinHandled) {
       console.error('WARNING: PIN challenge not handled - messages may not load');
     }
     
-    // Wait for content to load after PIN
-    await randomDelay();
-    await randomDelay();
+    // Click on Marketplace tab in the popup
+    console.error('Looking for Marketplace tab...');
+    const marketplaceSelectors = [
+      'button:has-text("Marketplace")',
+      '[role="dialog"] button:has-text("Marketplace")',
+      '[role="grid"] button:has-text("Marketplace")',
+      'span:has-text("Marketplace")',
+    ];
     
-    // Check current URL again
-    currentUrl = page.url();
-    console.error('URL after PIN handling:', currentUrl);
+    for (const selector of marketplaceSelectors) {
+      try {
+        const buttons = await page.locator(selector).all();
+        for (const btn of buttons) {
+          const text = await btn.textContent() || '';
+          if (text.includes('Marketplace')) {
+            console.error(`Found Marketplace button: ${text}`);
+            await btn.click();
+            console.error('Clicked on Marketplace');
+            await randomDelay();
+            await randomDelay();
+            await randomDelay(); // Wait for conversations to load
+            break;
+          }
+        }
+        if (buttons.length > 0) break;
+      } catch (e) {
+        // Continue to next selector
+      }
+    }
     
-    // After PIN, check if we're in the messages interface
-    // The conversation list should be visible on the left side
+    // Wait for conversation list to load
     console.error('Waiting for conversation list to load...');
     await randomDelay();
     await randomDelay();
     
-    // Debug: Log what we see on the page
-    const debugLinks = await page.locator('a[href*="/messages/t/"]').count();
-    console.error(`Debug: Found ${debugLinks} message thread links on page`);
-    
-    // Extract conversations
+    // Extract conversations from the Marketplace grid
     const conversations = await page.evaluate((limit) => {
       const items: any[] = [];
       
-      // Try multiple selectors for conversation items
-      const selectors = [
-        '[data-testid="mw_thread_list"] [role="link"]',
-        '[role="main"] a[href*="/messages/t/"]',
-        '[data-testid="mw_thread_list_item"]',
-        '[data-pagelet="MessengerContent"] a[href*="/messages/t/"]',
-        'a[href*="/messages/t/"]',
+      // Look for the Marketplace grid
+      const gridSelectors = [
+        'grid[aria-label="Marketplace"]',
+        '[role="grid"][aria-label*="Marketplace"]',
+        '[aria-label="Marketplace"] [role="grid"]',
+        '[role="grid"]',
       ];
       
-      let elements: Element[] = [];
-      for (const selector of selectors) {
-        elements = Array.from(document.querySelectorAll(selector));
-        if (elements.length > 0) {
-          console.error(`Found ${elements.length} conversations with selector: ${selector}`);
+      let grid: Element | null = null;
+      for (const selector of gridSelectors) {
+        grid = document.querySelector(selector);
+        if (grid) {
+          console.error(`Found grid with selector: ${selector}`);
           break;
         }
       }
       
-      elements.slice(0, limit).forEach((el, index) => {
-        const link = el.closest('a') || el;
+      if (!grid) {
+        console.error('No Marketplace grid found');
+        return items;
+      }
+      
+      // Find all rows (conversations) in the grid
+      const rows = grid.querySelectorAll('[role="row"], .x1n2onr6');
+      console.error(`Found ${rows.length} rows in grid`);
+      
+      rows.forEach((row, index) => {
+        // Find the link in the row
+        const link = row.querySelector('a[href*="/messages/t/"]');
+        if (!link) return;
+        
         const href = link.getAttribute('href') || '';
         const idMatch = href.match(/\/messages\/t\/(\d+)/);
-        const id = idMatch ? idMatch[1] : `conv_${index}`;
+        if (!idMatch) return;
         
-        // Extract participant names - try multiple approaches
+        const id = idMatch[1];
+        
+        // Extract text content
+        const text = link.textContent || '';
+        
+        // Parse the text to extract name, title, message, and time
+        // Format: "Name · Listing Title Message · Time"
+        const parts = text.split('·').map(p => p.trim());
+        
         let name = 'Unknown';
-        const text = el.textContent || '';
+        let title = '';
+        let lastMessageText = '';
+        let time = '';
         
-        // Try to find name in aria-label or text content
-        const ariaLabel = el.getAttribute('aria-label');
-        if (ariaLabel) {
-          const splitName = ariaLabel.split(',')[0];
-          name = splitName ? splitName : 'Unknown';
-        } else {
-          const nameMatch = text.match(/^([^·\n]+)/);
-          name = nameMatch?.[1]?.trim() ?? 'Unknown';
+        if (parts.length >= 2) {
+          // First part usually contains name and title
+          const firstPart = parts[0] ?? '';
+          const nameTitleMatch = firstPart.match(/^([^·]+)\s*·\s*(.+)$/);
+          if (nameTitleMatch && nameTitleMatch[1]) {
+            name = nameTitleMatch[1].trim();
+            if (nameTitleMatch[2]) {
+              title = nameTitleMatch[2].trim();
+            }
+          } else {
+            name = firstPart;
+          }
+          
+          // Last part is usually the time
+          const lastPart = parts[parts.length - 1];
+          time = lastPart ?? '';
+          
+          // Middle parts contain the message
+          if (parts.length > 2) {
+            const middleParts = parts.slice(1, -1);
+            lastMessageText = middleParts.filter((p): p is string => !!p).join(' · ');
+          }
         }
-        
-        // Extract last message preview
-        const lines = text.split('·').map(s => s.trim());
-        const lastMessageText = lines[1] || '';
         
         items.push({
           id,
           participants: [{ id: '', name }],
+          title,
           lastMessage: lastMessageText ? {
             text: lastMessageText,
             timestamp: new Date(),
             senderId: '',
           } : undefined,
+          time,
           unreadCount: 0,
         });
       });
       
-      return items;
+      return items.slice(0, limit);
     }, options.limit || 20);
     
     console.error(`Retrieved ${conversations.length} conversations`);
