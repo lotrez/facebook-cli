@@ -1,6 +1,6 @@
 {
   "name": "facebook-marketplace-cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "CLI tool for Facebook Marketplace and Messenger automation",
   "module": "dist/index.js",
   "type": "module",
