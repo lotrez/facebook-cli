@@ -25,7 +25,7 @@ describe('E2E: Facebook Marketplace Search', () => {
     
     const result = await $`bun run src/index.ts search --query "laptop" --limit 5 --format json`.text();
     
-    logger.debug({ result: result.substring(0, 500) }, 'Search result');
+    logger.debug(`Search result: ${result.substring(0, 500)}`);
     
     const data = parseJSONOutput(result);
 

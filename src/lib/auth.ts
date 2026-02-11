@@ -31,7 +31,7 @@ export class AuthManager {
     
     // Check if we're already on the main page (logged in)
     const currentUrl = page.url();
-    logger.debug({ url: currentUrl }, 'Current URL');
+    logger.debug(`Current URL: ${currentUrl}`);
     
     if (currentUrl.includes('facebook.com') && !currentUrl.includes('login') && !currentUrl.includes('checkpoint')) {
       // Check for navigation or main content
@@ -75,7 +75,7 @@ export class AuthManager {
     if (emailField === 0) {
       logger.warn('Email field not found, checking current page...');
       const url = page.url();
-      logger.debug({ url }, 'Current URL');
+      logger.debug(`Current URL: ${url}`);
       
       // Might already be logged in
       if (!url.includes('login')) {
@@ -104,7 +104,7 @@ export class AuthManager {
     } catch (error) {
       // Check current URL
       const url = page.url();
-      logger.debug({ url }, 'Current URL after login attempt');
+      logger.debug(`Current URL after login attempt: ${url}`);
       
       // Check for 2FA or other challenges
       if (url.includes('checkpoint') || url.includes('two_factor') || url.includes('security')) {
