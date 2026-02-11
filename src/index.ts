@@ -2,6 +2,7 @@
 import { createCLI } from '@bunli/core';
 import { searchCommand, listingCommand } from './commands/marketplace';
 import { listCommand, readCommand, sendCommand } from './commands/messages';
+import logger from './lib/logger';
 
 async function main() {
   const cli = await createCLI({
@@ -22,4 +23,7 @@ async function main() {
   await cli.run();
 }
 
-main().catch(console.error);
+main().catch((error) => {
+  logger.error(error, 'Unhandled error');
+  process.exit(1);
+});

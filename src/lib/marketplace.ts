@@ -1,6 +1,7 @@
 import { browserManager } from './browser';
 import { authManager } from './auth';
 import { randomDelay } from './utils';
+import logger from './logger';
 import type { Listing, SearchOptions } from '../types';
 
 export class MarketplaceManager {
@@ -18,7 +19,7 @@ export class MarketplaceManager {
       url += `search/?query=${encodeURIComponent(options.query)}`;
     }
     
-    console.error(`Searching marketplace for: ${options.query}`);
+    logger.info(`Searching marketplace for: ${options.query}`);
     
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await randomDelay();
@@ -27,7 +28,7 @@ export class MarketplaceManager {
     try {
       await page.waitForSelector('[role="main"] a[href*="/marketplace/item/"]', { timeout: 10000 });
     } catch (error) {
-      console.error('No listings found or page took too long to load');
+      logger.warn('No listings found or page took too long to load');
       return [];
     }
     
@@ -37,12 +38,12 @@ export class MarketplaceManager {
     }
     
     // Extract listings using Playwright locators
-    console.error('Extracting listings...');
+    logger.debug('Extracting listings...');
     const listings: Listing[] = [];
     
     // Find all listing links
     const links = await page.locator('a[href*="/marketplace/item/"]').all();
-    console.error(`Found ${links.length} listing links`);
+    logger.debug(`Found ${links.length} listing links`);
     
     for (const link of links.slice(0, options.limit || 20)) {
       try {
@@ -130,11 +131,11 @@ export class MarketplaceManager {
           postedAt: new Date(),
         });
       } catch (e) {
-        console.error('Failed to extract listing:', e);
+        logger.error(e, 'Failed to extract listing');
       }
     }
     
-    console.error(`Extracted ${listings.length} listings`);
+    logger.info(`Extracted ${listings.length} listings`);
     
     // Remove duplicates
     const uniqueListings = listings.filter((listing, index, self) => 
@@ -149,12 +150,12 @@ export class MarketplaceManager {
     const page = browserManager.getPage();
     
     const url = `https://www.facebook.com/marketplace/item/${id}`;
-    console.error(`Fetching listing: ${id}`);
+    logger.info(`Fetching listing: ${id}`);
     
     try {
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
     } catch (error) {
-      console.error('Navigation timeout, continuing anyway...');
+      logger.warn('Navigation timeout, continuing anyway...');
     }
     await randomDelay();
     
@@ -173,7 +174,7 @@ export class MarketplaceManager {
     }
     
     if (!contentFound) {
-      console.error('Listing content not found');
+      logger.error('Listing content not found');
       return null;
     }
     

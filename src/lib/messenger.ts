@@ -2,6 +2,7 @@ import { browserManager } from './browser';
 import { authManager } from './auth';
 import { config } from '../config';
 import { randomDelay } from './utils';
+import logger from './logger';
 import type { Conversation, Message, MessageOptions } from '../types';
 
 export class MessengerManager {
@@ -12,7 +13,7 @@ export class MessengerManager {
     await page.waitForTimeout(3000);
     
     if (!config.facebook.pin) {
-      console.error('No PIN configured in FACEBOOK_PIN env variable');
+      logger.warn('No PIN configured in FACEBOOK_PIN env variable');
       return false;
     }
     
@@ -31,14 +32,14 @@ export class MessengerManager {
       try {
         const inputs = await page.locator(selector).all();
         if (inputs.length > 0) {
-          console.error(`Found ${inputs.length} potential PIN inputs with selector: ${selector}`);
+          logger.debug(`Found ${inputs.length} potential PIN inputs with selector: ${selector}`);
           
           for (const input of inputs) {
             try {
-              console.error('Attempting to enter PIN...');
+              logger.debug('Attempting to enter PIN...');
               
               await input.fill(config.facebook.pin);
-              console.error('PIN entered');
+              logger.debug('PIN entered');
               await randomDelay();
               
               // Try to find and click a submit button first
@@ -46,15 +47,15 @@ export class MessengerManager {
               try {
                 if (await submitButton.count() > 0) {
                   await submitButton.click();
-                  console.error('Clicked submit button');
+                  logger.debug('Clicked submit button');
                 } else {
                   // Press Enter as fallback
                   await input.press('Enter');
-                  console.error('Pressed Enter to submit PIN');
+                  logger.debug('Pressed Enter to submit PIN');
                 }
               } catch (e) {
                 // Page might have navigated, that's OK
-                console.error('Submit action completed (page may have navigated)');
+                logger.debug('Submit action completed (page may have navigated)');
               }
               
               // Wait for page to process PIN
@@ -62,10 +63,10 @@ export class MessengerManager {
               await randomDelay();
               await randomDelay();
               
-              console.error('PIN submission completed');
+              logger.info('PIN submission completed');
               return true;
             } catch (e) {
-              console.error('Failed to enter PIN:', e);
+              logger.error(e, 'Failed to enter PIN');
               continue;
             }
           }
@@ -75,7 +76,7 @@ export class MessengerManager {
       }
     }
     
-    console.error('No PIN input found or PIN already handled');
+    logger.debug('No PIN input found or PIN already handled');
     return true;
   }
 
@@ -83,19 +84,19 @@ export class MessengerManager {
     await authManager.ensureLoggedIn();
     const page = browserManager.getPage();
     
-    console.error('Fetching conversations...');
+    logger.info('Fetching conversations...');
     
     // Navigate to messages page
-    console.error('Navigating to messages...');
+    logger.debug('Navigating to messages...');
     await page.goto('https://www.facebook.com/messages/', { waitUntil: 'domcontentloaded', timeout: 30000 });
     await randomDelay();
     await randomDelay();
     
     // Handle PIN challenge if present
-    console.error('Checking for PIN challenge...');
+    logger.debug('Checking for PIN challenge...');
     const pinHandled = await this.handlePinChallenge();
     if (!pinHandled) {
-      console.error('WARNING: PIN challenge not handled - messages may not load');
+      logger.warn('PIN challenge not handled - messages may not load');
     }
     
     // Wait for sidebar to load
@@ -104,7 +105,7 @@ export class MessengerManager {
     await randomDelay();
     
     // Look for the sidebar with conversation list and find Marketplace button
-    console.error('Looking for conversation list sidebar...');
+    logger.debug('Looking for conversation list sidebar...');
     
     // Try to find the sidebar navigation
     const sidebarSelectors = [
@@ -118,18 +119,18 @@ export class MessengerManager {
     for (const selector of sidebarSelectors) {
       try {
         const count = await page.locator(selector).count();
-        console.error(`Sidebar selector "${selector}" found ${count} elements`);
+        logger.debug(`Sidebar selector "${selector}" found ${count} elements`);
         if (count > 0) {
           sidebar = await page.locator(selector).first();
           break;
         }
       } catch (e) {
-        console.error(`Error with sidebar selector ${selector}:`, e);
+        logger.error(e, `Error with sidebar selector ${selector}`);
       }
     }
     
     // Look for Marketplace button anywhere on the page
-    console.error('Looking for Marketplace button on page...');
+    logger.debug('Looking for Marketplace button on page...');
     const marketplaceSelectors = [
       'button:has-text("Marketplace")',
       '[role="button"]:has-text("Marketplace")',
@@ -141,15 +142,15 @@ export class MessengerManager {
     for (const selector of marketplaceSelectors) {
       try {
         const buttons = await page.locator(selector).all();
-        console.error(`Selector "${selector}" found ${buttons.length} buttons`);
+        logger.debug(`Selector "${selector}" found ${buttons.length} buttons`);
         
         for (const btn of buttons) {
           const text = (await btn.textContent().catch(() => '')) ?? '';
-          console.error(`Button text: "${text}"`);
+          logger.debug(`Button text: "${text}"`);
           if (text.toLowerCase().includes('marketplace')) {
-            console.error(`Found Marketplace button: ${text}`);
+            logger.debug(`Found Marketplace button: ${text}`);
             await btn.click();
-            console.error('Clicked on Marketplace button');
+            logger.debug('Clicked on Marketplace button');
             await randomDelay();
             await randomDelay();
             await randomDelay();
@@ -159,12 +160,12 @@ export class MessengerManager {
         }
         if (marketplaceClicked) break;
       } catch (e) {
-        console.error(`Error with selector ${selector}:`, e);
+        logger.error(e, `Error with selector ${selector}`);
       }
     }
     
     if (!marketplaceClicked) {
-      console.error('Could not click Marketplace button, continuing anyway...');
+      logger.warn('Could not click Marketplace button, continuing anyway...');
     }
     
     // Wait for Marketplace grid to load
@@ -172,7 +173,7 @@ export class MessengerManager {
     await randomDelay();
     
     // Extract conversations using Playwright locators
-    console.error('Extracting conversations...');
+    logger.debug('Extracting conversations...');
     
     const conversations: Conversation[] = [];
     
@@ -187,14 +188,14 @@ export class MessengerManager {
     for (const selector of linkSelectors) {
       try {
         const count = await page.locator(selector).count();
-        console.error(`Selector "${selector}" found ${count} elements`);
+        logger.debug(`Selector "${selector}" found ${count} elements`);
         if (count > 0) {
           links = await page.locator(selector).all();
-          console.error(`Found ${links.length} conversation links with selector: ${selector}`);
+          logger.debug(`Found ${links.length} conversation links with selector: ${selector}`);
           break;
         }
       } catch (e) {
-        console.error(`Error with selector "${selector}":`, e);
+        logger.error(e, `Error with selector "${selector}"`);
       }
     }
     
@@ -247,11 +248,11 @@ export class MessengerManager {
           unreadCount: 0,
         });
       } catch (e) {
-        console.error('Failed to extract conversation:', e);
+        logger.error(e, 'Failed to extract conversation');
       }
     }
     
-    console.error(`Retrieved ${conversations.length} conversations`);
+    logger.info(`Retrieved ${conversations.length} conversations`);
     return conversations;
   }
 
@@ -259,7 +260,7 @@ export class MessengerManager {
     await authManager.ensureLoggedIn();
     const page = browserManager.getPage();
     
-    console.error(`Reading conversation: ${conversationId}`);
+    logger.info(`Reading conversation: ${conversationId}`);
     
     // Navigate to specific conversation
     await page.goto(`https://www.facebook.com/messages/t/${conversationId}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
@@ -272,7 +273,7 @@ export class MessengerManager {
     try {
       await page.waitForSelector('[role="main"], [data-testid="message_container"]', { timeout: 10000 });
     } catch (error) {
-      console.error('Could not load messages');
+      logger.error('Could not load messages');
       return [];
     }
     
@@ -334,7 +335,7 @@ export class MessengerManager {
     await authManager.ensureLoggedIn();
     const page = browserManager.getPage();
     
-    console.error(`Sending message to user: ${userId}`);
+    logger.info(`Sending message to user: ${userId}`);
     
     // Navigate to conversation with user
     await page.goto(`https://www.facebook.com/messages/t/${userId}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
@@ -347,7 +348,7 @@ export class MessengerManager {
     try {
       await page.waitForSelector('[contenteditable="true"], textarea, [role="textbox"]', { timeout: 10000 });
     } catch (error) {
-      console.error('Could not find message input');
+      logger.error('Could not find message input');
       return false;
     }
     
@@ -370,7 +371,7 @@ export class MessengerManager {
     }
     
     if (!inputFound) {
-      console.error('Could not find message input field');
+      logger.error('Could not find message input field');
       return false;
     }
     
@@ -380,7 +381,7 @@ export class MessengerManager {
     await page.keyboard.press('Enter');
     await randomDelay();
     
-    console.error('Message sent successfully');
+    logger.info('Message sent successfully');
     return true;
   }
 }

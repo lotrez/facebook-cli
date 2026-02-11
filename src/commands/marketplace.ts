@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { marketplaceManager } from '../lib/marketplace';
 import { browserManager } from '../lib/browser';
 import { toMarkdownListings } from '../lib/utils';
+import logger from '../lib/logger';
 
 export const searchCommand = defineCommand({
   name: 'search',
@@ -58,7 +59,7 @@ export const searchCommand = defineCommand({
         console.log(JSON.stringify({ listings }, null, 2));
       }
     } catch (error) {
-      console.error('Search failed:', error);
+      logger.error(error, 'Search failed');
       process.exit(1);
     } finally {
       await browserManager.close();
@@ -86,7 +87,7 @@ export const listingCommand = defineCommand({
       const listing = await marketplaceManager.getListing(flags.id);
       
       if (!listing) {
-        console.error('Listing not found');
+        logger.error('Listing not found');
         process.exit(1);
       }
       
@@ -96,7 +97,7 @@ export const listingCommand = defineCommand({
         console.log(JSON.stringify(listing, null, 2));
       }
     } catch (error) {
-      console.error('Failed to fetch listing:', error);
+      logger.error(error, 'Failed to fetch listing');
       process.exit(1);
     } finally {
       await browserManager.close();

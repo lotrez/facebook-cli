@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { messengerManager } from '../lib/messenger';
 import { browserManager } from '../lib/browser';
 import { toMarkdownConversations, toMarkdownMessages } from '../lib/utils';
+import logger from '../lib/logger';
 
 export const listCommand = defineCommand({
   name: 'list',
@@ -31,7 +32,7 @@ export const listCommand = defineCommand({
         console.log(JSON.stringify({ conversations }, null, 2));
       }
     } catch (error) {
-      console.error('Failed to list conversations:', error);
+      logger.error(error, 'Failed to list conversations');
       process.exit(1);
     } finally {
       await browserManager.close();
@@ -70,7 +71,7 @@ export const readCommand = defineCommand({
         console.log(JSON.stringify({ messages }, null, 2));
       }
     } catch (error) {
-      console.error('Failed to read messages:', error);
+      logger.error(error, 'Failed to read messages');
       process.exit(1);
     } finally {
       await browserManager.close();
@@ -103,11 +104,11 @@ export const sendCommand = defineCommand({
       if (success) {
         console.log(JSON.stringify({ success: true, message: 'Message sent' }, null, 2));
       } else {
-        console.error('Failed to send message');
+        logger.error('Failed to send message');
         process.exit(1);
       }
     } catch (error) {
-      console.error('Failed to send message:', error);
+      logger.error(error, 'Failed to send message');
       process.exit(1);
     } finally {
       await browserManager.close();

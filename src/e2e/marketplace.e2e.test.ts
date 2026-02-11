@@ -1,6 +1,7 @@
 import { describe, test, expect, afterAll } from 'bun:test';
 import { $ } from 'bun';
 import { browserManager } from '../lib/browser';
+import logger from '../lib/logger';
 
 // Helper to parse JSON output, filtering out dotenv logs
 function parseJSONOutput(output: string): any {
@@ -20,11 +21,11 @@ describe('E2E: Facebook Marketplace Search', () => {
   });
 
   test('should search for laptops and return structured results', async () => {
-    console.log('E2E: Searching for laptops...');
+    logger.info('E2E: Searching for laptops...');
     
     const result = await $`bun run src/index.ts search --query "laptop" --limit 5 --format json`.text();
     
-    console.log('Search result:', result.substring(0, 500));
+    logger.debug({ result: result.substring(0, 500) }, 'Search result');
     
     const data = parseJSONOutput(result);
 
@@ -59,15 +60,15 @@ describe('E2E: Facebook Marketplace Search', () => {
       expect(listing).toHaveProperty('seller');
       expect(listing.seller).toHaveProperty('name');
 
-      console.log(`Found ${data.listings.length} listings`);
-      console.log(`First listing: "${listing.title}" - $${listing.price}`);
+      logger.info(`Found ${data.listings.length} listings`);
+      logger.info(`First listing: "${listing.title}" - $${listing.price}`);
     } else {
-      console.log('No listings found (this can happen due to various reasons)');
+      logger.warn('No listings found (this can happen due to various reasons)');
     }
   }, 120000);
 
   test('should search with price filters', async () => {
-    console.log('E2E: Searching with price filters...');
+    logger.info('E2E: Searching with price filters...');
     
     const result = await $`bun run src/index.ts search --query "furniture" --min-price 50 --max-price 500 --limit 3 --format json`.text();
     
@@ -75,11 +76,11 @@ describe('E2E: Facebook Marketplace Search', () => {
 
     // Note: Price filtering is sent to Facebook, but we can't reliably
     // validate the returned prices due to scraping limitations (often shows 0)
-    console.log(`Found ${data.listings.length} listings with price filters applied`);
+    logger.info(`Found ${data.listings.length} listings with price filters applied`);
   }, 120000);
 
   test('should return results in markdown format', async () => {
-    console.log('E2E: Testing markdown output...');
+    logger.info('E2E: Testing markdown output...');
     
     const result = await $`bun run src/index.ts search --query "bike" --limit 3 --format markdown`.text();
     
@@ -88,11 +89,11 @@ describe('E2E: Facebook Marketplace Search', () => {
     const hasListings = result.includes('## ') || result.includes('No listings found');
     expect(hasListings).toBe(true);
     
-    console.log('Markdown output structure is valid');
+    logger.info('Markdown output structure is valid');
   }, 120000);
 
   test('should handle location-based search', async () => {
-    console.log('E2E: Testing location-based search...');
+    logger.info('E2E: Testing location-based search...');
     
     const result = await $`bun run src/index.ts search --query "car" --location "Los Angeles, CA" --radius 25 --limit 3 --format json`.text();
     
@@ -104,7 +105,7 @@ describe('E2E: Facebook Marketplace Search', () => {
         expect(listing.location).toBeDefined();
         expect(typeof listing.location).toBe('string');
       });
-      console.log(`Found ${data.listings.length} listings near Los Angeles`);
+      logger.info(`Found ${data.listings.length} listings near Los Angeles`);
     }
   }, 120000);
 });
@@ -113,18 +114,18 @@ describe('E2E: Listing Details', () => {
   let testListingId: string;
 
   test('should get detailed information for a specific listing', async () => {
-    console.log('E2E: Getting listing details...');
+    logger.info('E2E: Getting listing details...');
     
     const searchResult = await $`bun run src/index.ts search --query "table" --limit 1 --format json`.text();
     const searchData = parseJSONOutput(searchResult);
     
     if (searchData.listings.length === 0) {
-      console.log('No listings found to test details');
+      logger.warn('No listings found to test details');
       return;
     }
     
     testListingId = searchData.listings[0].id;
-    console.log(`Testing with listing ID: ${testListingId}`);
+    logger.info(`Testing with listing ID: ${testListingId}`);
     
     const detailResult = await $`bun run src/index.ts listing --id ${testListingId} --format json`.text();
     const detailData = JSON.parse(detailResult);
@@ -139,14 +140,14 @@ describe('E2E: Listing Details', () => {
     expect(detailData.seller).toHaveProperty('name');
     expect(detailData).toHaveProperty('url');
     
-    console.log(`Got details for: "${detailData.title}"`);
-    console.log(`Description length: ${detailData.description?.length || 0} chars`);
-    console.log(`Images found: ${detailData.images.length}`);
+    logger.info(`Got details for: "${detailData.title}"`);
+    logger.info(`Description length: ${detailData.description?.length || 0} chars`);
+    logger.info(`Images found: ${detailData.images.length}`);
   }, 120000);
 
   test('should return listing details in markdown format', async () => {
     if (!testListingId) {
-      console.log('Skipping - no listing ID from previous test');
+      logger.warn('Skipping - no listing ID from previous test');
       return;
     }
     
@@ -155,13 +156,13 @@ describe('E2E: Listing Details', () => {
     expect(result).toContain('# Facebook Marketplace Search');
     expect(result).toContain(testListingId);
     
-    console.log('Markdown format listing details retrieved');
+    logger.info('Markdown format listing details retrieved');
   }, 120000);
 });
 
 describe('E2E: Messenger Operations', () => {
   test('should list conversations', async () => {
-    console.log('E2E: Listing conversations...');
+    logger.info('E2E: Listing conversations...');
     
     const result = await $`bun run src/index.ts list --limit 10 --format json`.text();
     
@@ -182,26 +183,26 @@ describe('E2E: Messenger Operations', () => {
         expect(conversation.lastMessage).toHaveProperty('timestamp');
       }
       
-      console.log(`Found ${data.conversations.length} conversations`);
-      console.log(`First conversation with: ${conversation.participants[0]?.name}`);
+      logger.info(`Found ${data.conversations.length} conversations`);
+      logger.info(`First conversation with: ${conversation.participants[0]?.name}`);
     } else {
-      console.log('No conversations found');
+      logger.warn('No conversations found');
     }
   }, 120000);
 
   test('should read messages from a conversation', async () => {
-    console.log('E2E: Reading conversation messages...');
+    logger.info('E2E: Reading conversation messages...');
     
     const listResult = await $`bun run src/index.ts list --limit 1 --format json`.text();
     const listData = parseJSONOutput(listResult);
     
     if (listData.conversations.length === 0) {
-      console.log('No conversations to read');
+      logger.warn('No conversations to read');
       return;
     }
     
     const conversationId = listData.conversations[0].id;
-    console.log(`Reading messages for conversation: ${conversationId}`);
+    logger.info(`Reading messages for conversation: ${conversationId}`);
     
     const result = await $`bun run src/index.ts read --conversation-id ${conversationId} --limit 20 --format json`.text();
 
@@ -218,35 +219,35 @@ describe('E2E: Messenger Operations', () => {
       expect(message).toHaveProperty('text');
       expect(message).toHaveProperty('timestamp');
       
-      console.log(`Read ${data.messages.length} messages`);
-      console.log(`Latest from ${message.senderName}: "${message.text.substring(0, 50)}..."`);
+      logger.info(`Read ${data.messages.length} messages`);
+      logger.info(`Latest from ${message.senderName}: "${message.text.substring(0, 50)}..."`);
     } else {
-      console.log('No messages in conversation');
+      logger.warn('No messages in conversation');
     }
   }, 120000);
 });
 
 describe('E2E: Error Handling', () => {
   test('should handle invalid listing ID gracefully', async () => {
-    console.log('E2E: Testing error handling for invalid ID...');
+    logger.info('E2E: Testing error handling for invalid ID...');
     
     try {
       await $`bun run src/index.ts listing --id 000000000000000 --format json`.text();
-      console.log('Command completed (listing may not exist)');
+      logger.info('Command completed (listing may not exist)');
     } catch (error: any) {
       expect(error.exitCode).toBe(1);
-      console.log('Command failed as expected for invalid ID');
+      logger.info('Command failed as expected for invalid ID');
     }
   }, 60000);
 
   test('should require query parameter for search', async () => {
-    console.log('E2E: Testing validation...');
+    logger.info('E2E: Testing validation...');
     
     try {
       await $`bun run src/index.ts search --limit 5`.text();
     } catch (error: any) {
       expect(error).toBeDefined();
-      console.log('Validation working - query is required');
+      logger.info('Validation working - query is required');
     }
   }, 30000);
 });
@@ -266,11 +267,11 @@ describe('E2E: Command Output Validation', () => {
       expect(typeof data.listings[0].price).toBe('number');
     }
     
-    console.log('JSON output is valid');
+    logger.info('JSON output is valid');
   }, 120000);
 
   test('all commands should complete without hanging', async () => {
-    console.log('E2E: Testing command completion...');
+    logger.info('E2E: Testing command completion...');
     
     const searchPromise = $`bun run src/index.ts search --query "book" --limit 1`.quiet();
     const listPromise = $`bun run src/index.ts list --limit 1`.quiet();
@@ -280,9 +281,9 @@ describe('E2E: Command Output Validation', () => {
     results.forEach((result, index) => {
       const cmd = index === 0 ? 'search' : 'list';
       if (result.status === 'fulfilled') {
-        console.log(`${cmd} completed successfully`);
+        logger.info(`${cmd} completed successfully`);
       } else {
-        console.log(`${cmd} failed: ${result.reason}`);
+        logger.warn(`${cmd} failed: ${result.reason}`);
       }
     });
   }, 120000);

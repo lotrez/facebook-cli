@@ -2,6 +2,7 @@ import { chromium, type Browser, type Page, type Cookie } from 'playwright';
 import { config, ensureSessionDir, getSessionPath } from '../config';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { randomDelay } from './utils';
+import logger from './logger';
 
 export class BrowserManager {
   private browser: Browser | null = null;
@@ -44,7 +45,7 @@ export class BrowserManager {
         const cookies: Cookie[] = JSON.parse(cookiesData);
         await this.page.context().addCookies(cookies);
       } catch (error) {
-        console.error('Failed to load cookies:', error);
+        logger.error(error, 'Failed to load cookies');
       }
     }
   }
@@ -59,7 +60,7 @@ export class BrowserManager {
       const cookies = await this.page.context().cookies();
       writeFileSync(sessionPath, JSON.stringify(cookies, null, 2));
     } catch (error) {
-      console.error('Failed to save cookies:', error);
+        logger.error(error, 'Failed to save cookies');
     }
   }
 

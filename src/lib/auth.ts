@@ -1,6 +1,7 @@
 import { browserManager } from './browser';
 import { config, validateConfig } from '../config';
 import { randomDelay } from './utils';
+import logger from './logger';
 
 export class AuthManager {
   private isLoggedIn = false;
@@ -14,7 +15,7 @@ export class AuthManager {
     
     const page = await browserManager.launch();
     
-    console.error('Checking login status...');
+    logger.info('Checking login status...');
     
     // Check if already logged in via cookies - use shorter timeout and domcontentloaded
     try {
@@ -23,14 +24,14 @@ export class AuthManager {
         timeout: 15000 
       });
     } catch (error) {
-      console.error('Initial navigation timeout, proceeding to login...');
+      logger.warn('Initial navigation timeout, proceeding to login...');
     }
     
     await randomDelay();
     
     // Check if we're already on the main page (logged in)
     const currentUrl = page.url();
-    console.error('Current URL:', currentUrl);
+    logger.debug({ url: currentUrl }, 'Current URL');
     
     if (currentUrl.includes('facebook.com') && !currentUrl.includes('login') && !currentUrl.includes('checkpoint')) {
       // Check for navigation or main content
@@ -39,12 +40,12 @@ export class AuthManager {
         const hasFeed = await page.locator('[role="main"], [data-testid="news_feed_stream"]').count() > 0;
         
         if (hasNav || hasFeed) {
-          console.error('Already logged in via saved session');
+          logger.info('Already logged in via saved session');
           this.isLoggedIn = true;
           return;
         }
       } catch (error) {
-        console.error('Error checking login status:', error);
+        logger.error(error, 'Error checking login status');
       }
     }
     
@@ -55,7 +56,7 @@ export class AuthManager {
   private async login(): Promise<void> {
     const page = browserManager.getPage();
     
-    console.error('Logging in...');
+    logger.info('Logging in...');
     
     // Navigate to login page with shorter timeout
     try {
@@ -64,7 +65,7 @@ export class AuthManager {
         timeout: 15000 
       });
     } catch (error) {
-      console.error('Login page navigation timeout');
+      logger.warn('Login page navigation timeout');
     }
     
     await randomDelay();
@@ -72,13 +73,13 @@ export class AuthManager {
     // Check if email field exists
     const emailField = await page.locator('#email').count();
     if (emailField === 0) {
-      console.error('Email field not found, checking current page...');
+      logger.warn('Email field not found, checking current page...');
       const url = page.url();
-      console.error('Current URL:', url);
+      logger.debug({ url }, 'Current URL');
       
       // Might already be logged in
       if (!url.includes('login')) {
-        console.error('Appears to already be logged in');
+        logger.info('Appears to already be logged in');
         this.isLoggedIn = true;
         return;
       }
@@ -103,7 +104,7 @@ export class AuthManager {
     } catch (error) {
       // Check current URL
       const url = page.url();
-      console.error('Current URL after login attempt:', url);
+      logger.debug({ url }, 'Current URL after login attempt');
       
       // Check for 2FA or other challenges
       if (url.includes('checkpoint') || url.includes('two_factor') || url.includes('security')) {
@@ -113,7 +114,7 @@ export class AuthManager {
       // Check if we're actually logged in but URL didn't change as expected
       const hasNav = await page.locator('[role="navigation"]').count() > 0;
       if (hasNav) {
-        console.error('Login appears successful despite URL check');
+        logger.info('Login appears successful despite URL check');
       } else {
         throw new Error('Login failed. Check your credentials or use --headed flag to debug.');
       }
@@ -125,7 +126,7 @@ export class AuthManager {
     await browserManager.saveCookies();
     
     this.isLoggedIn = true;
-    console.error('Login successful');
+    logger.info('Login successful');
   }
 
   async logout(): Promise<void> {
