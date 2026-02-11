@@ -173,6 +173,21 @@ Human-readable format optimized for LLM consumption:
 - **URL:** https://facebook.com/marketplace/item/123456
 ```
 
+## Handling Null Titles in Search Results
+
+**Important:** Marketplace search results may return listings with `title: null`. This happens when Facebook doesn't display the item title in search results (common for non-vehicle listings).
+
+**To get the actual title, fetch the listing details:**
+```bash
+# Search returns some listings with null titles
+facebook-cli search --query "bmw" --format json
+
+# Fetch individual listing to get the real title
+facebook-cli listing --id <listing-id> --format json
+```
+
+**Why this happens:** Facebook only shows titles for certain categories (like vehicles) in search results. Other items show only price + location.
+
 ## Common Workflows
 
 ### Search and Contact Workflow
@@ -180,7 +195,7 @@ Human-readable format optimized for LLM consumption:
 # 1. Search for items
 facebook-cli search --query "laptop" --limit 5 --format json > results.json
 
-# 2. Get details for interesting listing
+# 2. Get details for interesting listing (especially if title is null)
 facebook-cli listing --id <listing-id-from-results> --format markdown
 
 # 3. List conversations to find seller

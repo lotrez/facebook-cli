@@ -1,6 +1,6 @@
 export interface Listing {
   id: string;
-  title: string;
+  title: string | null;
   price: number;
   currency: string;
   location: string;

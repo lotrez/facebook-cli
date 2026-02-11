@@ -67,55 +67,59 @@ export class MarketplaceManager {
           }
         }
 
-        // Try to extract location (pattern: City, REGION)
-        const locationMatch = linkText.match(/([A-Z][^\d]+?[a-z]+,\s*[A-Z]{2,})/);
+        // Extract title and location from image alt text (most reliable)
+        // Format: "Title dans Location" e.g., "1996 BMW dans Saint-Ouen-de-Mimbré, PDL"
+        // Sometimes format is: " dans Location" (no title in search results)
+        let title: string | null = null;
         let location = 'Unknown Location';
-        if (locationMatch && locationMatch[1]) {
-          location = locationMatch[1].trim();
-        }
-
-        // Extract title - everything between first price and location
-        let title = 'Unknown Item';
-        if (priceMatch?.[0] && locationMatch?.[1]) {
-          const priceEnd = linkText.indexOf(priceMatch[0]) + priceMatch[0].length;
-          const locationStart = linkText.indexOf(locationMatch[1]);
-          if (priceEnd < locationStart) {
-            let rawTitle = linkText.substring(priceEnd, locationStart).trim();
-            // Remove any additional price that might be in the title (old crossed-out price)
-            rawTitle = rawTitle.replace(/[\d\s]+\s*€\s*/, '');
-            title = rawTitle || 'Unknown Item';
+        
+        const img = await link.locator('img').first();
+        const imgAlt = await img.getAttribute('alt');
+        
+        if (imgAlt && imgAlt.includes(' dans ')) {
+          const parts = imgAlt.split(' dans ');
+          if (parts.length >= 2 && parts[1]) {
+            // Extract location (always present)
+            location = parts[1].trim();
+            
+            // Extract title if present (parts[0] will be empty string if no title)
+            const possibleTitle = parts[0]?.trim();
+            if (possibleTitle) {
+              title = possibleTitle;
+            }
+            // If no title in search results, title remains null
           }
         }
-
-        // Fallback: if no title extracted, try aria-label
-        if (title === 'Unknown Item') {
+        
+        // Fallback: try aria-label if img alt didn't work
+        if (title === null) {
           const ariaLabel = await link.getAttribute('aria-label');
-          if (ariaLabel) {
+          if (ariaLabel && ariaLabel.includes(' dans ')) {
             const parts = ariaLabel.split(' dans ');
-            if (parts.length > 0 && parts[0]) {
-              title = parts[0].trim();
+            if (parts.length >= 2 && parts[1]) {
+              location = parts[1].trim();
+              const possibleTitle = parts[0]?.trim();
+              if (possibleTitle) {
+                title = possibleTitle;
+              }
             }
           }
         }
         
-        // Fallback: try to get from link text if we couldn't extract properly
-        if (title === 'Unknown Item' || price === 0) {
-          const fullText = await link.textContent() || '';
-          
-          // Try to extract price from full text
-          const priceMatch = fullText.match(/([\d\s]+)\s*€/);
-          if (priceMatch && priceMatch[1] && price === 0) {
-            const priceStr = priceMatch[1].replace(/\s/g, '');
-            const parsedPrice = parseInt(priceStr, 10);
-            if (!isNaN(parsedPrice)) price = parsedPrice;
-          }
-          
-          // Try to get title from aria-label or text
-          const ariaLabel = await link.getAttribute('aria-label');
-          if (ariaLabel && title === 'Unknown Item') {
-            const parts = ariaLabel.split('dans');
-            const extractedTitle = parts[0]?.trim();
-            title = extractedTitle || ariaLabel || 'Unknown Item';
+        // Last resort: try to extract from link text
+        if (title === null) {
+          // Try to extract location (pattern: City, REGION)
+          const locationMatch = linkText.match(/([\p{L}\s'-]+?,\s*[A-Z]{2,3})(?=\d|\s*K\s*km|$)/u);
+          if (locationMatch && locationMatch[1]) {
+            location = locationMatch[1].trim();
+            
+            // Try to extract title from before location
+            const locationStart = linkText.indexOf(locationMatch[1]);
+            const beforeLocation = linkText.substring(0, locationStart).trim();
+            const titleCandidate = beforeLocation.replace(/^[\d\s]+\s*€\s*/g, '').trim();
+            if (titleCandidate) {
+              title = titleCandidate;
+            }
           }
         }
 
@@ -180,33 +184,51 @@ export class MarketplaceManager {
     
     // Extract detailed information
     const listing = await page.evaluate(() => {
-      const titleEl = document.querySelector('h1');
+      // Find title in the main content area, not the first h1 on page
+      const mainContent = document.querySelector('[role="main"]') || document.body;
+      const titleEl = mainContent.querySelector('h1');
       const title = titleEl?.textContent?.trim() || 'Unknown Item';
       
-      // Try to find price
+      // Try to find price - look for euro symbol since we're on French Facebook
       const bodyText = document.body.textContent || '';
-      const priceMatch = bodyText.match(/\$([\d,]+(?:\.\d{2})?)/);
-      const price = priceMatch?.[1] ? parseFloat(priceMatch[1].replace(/,/g, '')) : 0;
+      const euroMatch = bodyText.match(/([\d\s]+)\s*€/);
+      const price = euroMatch?.[1] ? parseInt(euroMatch[1].replace(/\s/g, ''), 10) : 0;
       
-      // Find description
-      const descriptionEl = Array.from(document.querySelectorAll('div')).find(el => 
-        el.textContent && el.textContent.length > 100 && !el.querySelector('h1')
-      );
+      // Find description - look for longer text blocks in the main content
+      const descriptionEl = Array.from(mainContent.querySelectorAll('div')).find(el => {
+        const text = el.textContent || '';
+        return text.length > 50 && text.length < 500 && 
+               !el.querySelector('h1') && 
+               !text.includes('€') &&
+               text.split(' ').length > 5;
+      });
       const description = descriptionEl?.textContent?.trim();
       
-      // Find location
-      const locationMatch = bodyText.match(/([^,]+,\s*[A-Z]{2})/);
-      const location = locationMatch?.[1] ?? 'Unknown Location';
+      // Find location - look for link with location or pattern City, REGION
+      // French regions can be 2-3 uppercase letters
+      const locationLink = mainContent.querySelector('a[href*="/marketplace/"]') as HTMLAnchorElement | null;
+      let location = 'Unknown Location';
+      if (locationLink) {
+        const locationText = locationLink.textContent?.trim();
+        if (locationText && locationText.match(/[\p{L}\s'-]+,\s*[A-Z]{2,3}/u)) {
+          location = locationText;
+        }
+      }
       
-      // Extract images
-      const images = Array.from(document.querySelectorAll('img'))
+      // Extract images from main content only
+      const images = Array.from(mainContent.querySelectorAll('img'))
         .map(img => img.src)
         .filter(src => src && src.includes('fbcdn.net'))
         .slice(0, 5);
       
-      // Find seller info
-      const sellerLinks = Array.from(document.querySelectorAll('a'));
-      const sellerLink = sellerLinks.find(a => a.href.includes('/marketplace/profile/'));
+      // Find seller info - look for profile links with actual names (not "Informations vendeur")
+      const sellerLinks = Array.from(mainContent.querySelectorAll('a[href*="/marketplace/profile/"]')) as HTMLAnchorElement[];
+      // Filter out links that just say "Informations vendeur(se)"
+      const sellerLink = sellerLinks.find(a => {
+        const text = a.textContent?.trim() || '';
+        return text && text.length > 0 && !text.includes('Informations vendeur');
+      });
+      
       const sellerName = sellerLink?.textContent?.trim() || 'Unknown Seller';
       const sellerIdMatch = sellerLink?.href.match(/\/marketplace\/profile\/(\d+)/);
       const sellerId = sellerIdMatch ? sellerIdMatch[1] : '';
@@ -214,7 +236,7 @@ export class MarketplaceManager {
       return {
         title,
         price,
-        currency: 'USD',
+        currency: 'EUR',
         location,
         description,
         images,
