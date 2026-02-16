@@ -1,7 +1,7 @@
 import { config } from '../config';
 
-export function randomDelay(): Promise<void> {
-  const delay = Math.floor(
+export function randomDelay(fixedDelay?: number): Promise<void> {
+  const delay = fixedDelay ?? Math.floor(
     Math.random() * (config.delays.max - config.delays.min + 1) + config.delays.min
   );
   return new Promise(resolve => setTimeout(resolve, delay));

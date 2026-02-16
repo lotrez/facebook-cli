@@ -11,18 +11,17 @@ export class MarketplaceManager {
     
     // Build search URL
     let url = 'https://www.facebook.com/marketplace/';
-    
-    if (options.location) {
-      // Need to geocode location or use a search approach
-      url += `search/?query=${encodeURIComponent(options.query)}`;
-    } else {
-      url += `search/?query=${encodeURIComponent(options.query)}`;
-    }
+    url += `search/?query=${encodeURIComponent(options.query)}`;
     
     logger.info(`Searching marketplace for: ${options.query}`);
     
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await randomDelay();
+    
+    // Handle location filter if specified
+    if (options.location) {
+      await this.setLocationFilter(options.location, options.radius);
+    }
     
     // Wait for listings to load
     try {
@@ -253,6 +252,135 @@ export class MarketplaceManager {
       url,
       postedAt: new Date(),
     } as Listing;
+  }
+
+  private async setLocationFilter(location: string, radius?: number): Promise<void> {
+    const page = browserManager.getPage();
+    
+    logger.info(`Setting location filter to: ${location}`);
+    
+    try {
+      await randomDelay(2000);
+      
+      // Wait for the main content to load
+      await page.waitForSelector('[role="main"]', { timeout: 10000 });
+      await randomDelay(1000);
+      
+      // Use getByRole which works best with exact text matching
+      // The button contains the location name and "km" or "mi"
+      const locationButton = page.getByRole('button', { name: /Angers|San Francisco|Paris|London|New York|Los Angeles/i }).first();
+      
+      const isVisible = await locationButton.isVisible().catch(() => false);
+      
+      if (isVisible) {
+        await locationButton.click();
+      } else {
+        // Fallback: try a more generic selector that looks for buttons with km/mi
+        const fallbackButton = page.locator('button').filter({ hasText: /km|kilomètres|miles/i }).first();
+        await fallbackButton.click();
+      }
+      
+      await randomDelay(2000);
+      
+      // Wait for the location dialog - look specifically for "Changer le lieu"
+      const dialog = page.locator('div[role="dialog"]:has(h2:has-text("Changer le lieu"))');
+      await dialog.waitFor({ state: 'visible', timeout: 10000 });
+      
+      // Fill location
+      const locationCombobox = dialog.locator('input[role="combobox"]').first();
+      await locationCombobox.fill(location);
+      await randomDelay(3000);
+      
+      // Wait for suggestions and select the first one
+      // Try multiple selector strategies
+      let suggestion = page.locator('[role="option"]').first();
+      let hasSuggestions = await suggestion.count() > 0;
+      
+      if (!hasSuggestions) {
+        // Try ul/li list selector
+        suggestion = dialog.locator('ul li').first();
+        hasSuggestions = await suggestion.count() > 0;
+      }
+      
+      if (!hasSuggestions) {
+        // Try clicking in the box to trigger autocomplete
+        await locationCombobox.click();
+        await randomDelay(2000);
+        suggestion = page.locator('[role="option"]').first();
+        hasSuggestions = await suggestion.count() > 0;
+      }
+      
+      if (hasSuggestions) {
+        await suggestion.waitFor({ state: 'visible', timeout: 5000 });
+        await suggestion.click();
+      } else {
+        logger.warn('No suggestions found for location, proceeding anyway');
+      }
+      await randomDelay(2000);
+      
+      // Verify location is in the field - if not, try selecting again
+      const locationValue = await locationCombobox.inputValue();
+      
+      if (!locationValue.toLowerCase().includes(location.toLowerCase())) {
+        await locationCombobox.fill(location);
+        await randomDelay(2000);
+        await suggestion.click();
+        await randomDelay(2000);
+      }
+      
+      // Set radius if specified
+      if (radius !== undefined) {
+        await this.setRadiusInDialog(dialog, radius);
+      }
+      
+      // Click Apply - use global button selector
+      await page.getByRole('button', { name: /Appliquer|Apply/i }).click();
+      await randomDelay(3000);
+      
+      logger.info(`Location filter applied successfully`);
+    } catch (error) {
+      logger.error(error, 'Failed to set location filter');
+    }
+  }
+  
+  private async setRadiusInDialog(dialog: any, radius: number): Promise<void> {
+    const page = browserManager.getPage();
+    
+    // Look for the radius dropdown in the dialog
+    // It could be a select element or a button that opens a dropdown
+    const radiusSelect = dialog.locator('select').first();
+    const radiusButton = dialog.locator('button[role="combobox"]').first();
+    
+    const hasSelect = await radiusSelect.count() > 0;
+    const hasButton = await radiusButton.count() > 0;
+    
+    if (hasSelect) {
+      // Select the radius - Facebook uses km values like 10, 25, 50, 100, 250
+      const radiusKm = radius <= 10 ? '10' : radius <= 25 ? '25' : radius <= 50 ? '50' : radius <= 100 ? '100' : '250';
+      await radiusSelect.selectOption(radiusKm);
+      await randomDelay(1000);
+    } else if (hasButton) {
+      // Click to open radius dropdown
+      await radiusButton.click();
+      await randomDelay(1000);
+      
+      // Find the option matching our radius
+      const radiusOption = page.locator(`[role="option"]:has-text("${radius} km")`).first();
+      const hasOption = await radiusOption.count() > 0;
+      
+      if (hasOption) {
+        await radiusOption.click();
+      } else {
+        // Try common radius values
+        const options = ['10', '25', '50', '100', '250'];
+        const closest = options.reduce((prev, curr) => 
+          Math.abs(parseInt(curr) - radius) < Math.abs(parseInt(prev) - radius) ? curr : prev
+        );
+        const closestOption = page.locator(`[role="option"]:has-text("${closest}")`).first();
+        await closestOption.click();
+      }
+      await randomDelay(1000);
+    }
   }
 }
 
